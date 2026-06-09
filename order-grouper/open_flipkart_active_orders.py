@@ -28,10 +28,12 @@ TARGET_URL = (
 )
 
 FIREFOX_PROFILES = {
-    "prabhu": Path(r"C:\Users\ESHAAN\Documents\Firefox-Profiles\0xe7h0bx.prabhu"),
+    # "prabhu": Path(r"C:\Users\ESHAAN\Documents\Firefox-Profiles\0xe7h0bx.prabhu"),
+    "prabhu-dell": Path(r"C:\Users\eshaa\AppData\Roaming\Mozilla\Firefox\Profiles\doe3pe6v.default-release"),
+    "seema-dell": Path(r"C:\Users\eshaa\AppData\Roaming\Mozilla\Firefox\Profiles\ZotyVadn.Profile 1"),
 }
 
-DEFAULT_PROFILE_NAME = "prabhu"
+DEFAULT_PROFILE_NAME = "prabhu-dell"
 VARIANT_SELECTION_WORKBOOK = Path(
     r"C:\work-mom\Code-Tools\Full-LC-AUTO\order-grouper\Variant Selection.xlsx"
 )
@@ -119,6 +121,71 @@ def build_firefox_driver(profile_name: str = DEFAULT_PROFILE_NAME) -> webdriver.
         return webdriver.Firefox(service=service, options=options)
 
     return webdriver.Firefox(options=options)
+
+
+def prompt_for_firefox_profile(default_profile_name: str = DEFAULT_PROFILE_NAME) -> str:
+    profile_names = sorted(FIREFOX_PROFILES)
+    if not profile_names:
+        raise ValueError("No Firefox profiles are configured.")
+
+    if default_profile_name not in FIREFOX_PROFILES:
+        default_profile_name = profile_names[0]
+
+    root = tk.Tk()
+    root.title("Firefox Profile")
+    root.attributes("-topmost", True)
+    root.resizable(False, False)
+
+    selected_profile = tk.StringVar(value=default_profile_name)
+    status_var = tk.StringVar(value="Choose which profile to open Firefox with.")
+    selection_result: dict[str, str] = {}
+
+    def submit() -> None:
+        profile_name = selected_profile.get().strip()
+        if not profile_name:
+            status_var.set("Please choose a Firefox profile.")
+            return
+        selection_result["profile"] = profile_name
+        root.destroy()
+
+    def cancel() -> None:
+        root.destroy()
+
+    container = ttk.Frame(root, padding=16)
+    container.grid(row=0, column=0, sticky="nsew")
+
+    ttk.Label(container, text="Firefox profile").grid(row=0, column=0, sticky="w")
+    profile_combo = ttk.Combobox(
+        container,
+        textvariable=selected_profile,
+        values=profile_names,
+        state="readonly",
+        width=28,
+    )
+    profile_combo.grid(row=1, column=0, sticky="ew", pady=(4, 12))
+
+    ttk.Label(container, textvariable=status_var, wraplength=280).grid(
+        row=2, column=0, sticky="w", pady=(0, 12)
+    )
+
+    button_row = ttk.Frame(container)
+    button_row.grid(row=3, column=0, sticky="ew")
+    ttk.Button(button_row, text="Open Firefox", command=submit).grid(row=0, column=0, padx=(0, 8))
+    ttk.Button(button_row, text="Cancel", command=cancel).grid(row=0, column=1)
+
+    root.protocol("WM_DELETE_WINDOW", cancel)
+    root.update_idletasks()
+    width = root.winfo_width()
+    height = root.winfo_height()
+    x = (root.winfo_screenwidth() // 2) - (width // 2)
+    y = (root.winfo_screenheight() // 2) - (height // 2)
+    root.geometry(f"+{x}+{y}")
+    root.mainloop()
+
+    if "profile" not in selection_result:
+        raise ValueError("Firefox profile selection was cancelled.")
+
+    return selection_result["profile"]
 
 
 def prompt_for_variant_selection() -> tuple[str, str]:
@@ -458,10 +525,14 @@ def find_page_size_option_label(
     )
 
 
-def select_page_size_option(driver: webdriver.Firefox, option_text: str = "100") -> None:
+def select_page_size_option(
+    driver: webdriver.Firefox,
+    option_text: str = "100",
+    timeout: int = 12,
+) -> None:
     log_event("FORM", f"Starting page-size selection flow for option '{option_text}'.")
-    scroll_to_pagination_area(driver, timeout=30)
-    items_per_page_combobox = wait_for_items_per_page_combobox(driver, timeout=30)
+    scroll_to_pagination_area(driver, timeout=timeout)
+    items_per_page_combobox = wait_for_items_per_page_combobox(driver, timeout=timeout)
     click_element_with_gui(
         driver,
         items_per_page_combobox,
@@ -469,7 +540,7 @@ def select_page_size_option(driver: webdriver.Firefox, option_text: str = "100")
     )
     log_event("FORM", "Opened the Items / page dropdown.")
     sleep(0.75)
-    option_label = find_page_size_option_label(driver, option_text=option_text, timeout=30)
+    option_label = find_page_size_option_label(driver, option_text=option_text, timeout=timeout)
     click_element_with_gui(driver, option_label, label=f"page size option {option_text}")
     log_event("FORM", f"Selected page-size option '{option_text}'.")
 
@@ -707,6 +778,52 @@ def open_image_in_new_tab(driver: webdriver.Firefox, image_path: Path) -> None:
     log_event("DONE", f"Opened completion image in a new tab: {image_uri}")
 
 
+def show_accept_all_orders_prompt(driver: webdriver.Firefox, url: str) -> None:
+    root = tk.Tk()
+    root.title("Accept Orders First")
+    root.attributes("-topmost", True)
+    root.resizable(False, False)
+
+    def continue_after_accepting_orders() -> None:
+        replace_current_tab_with_url(driver, url)
+        root.destroy()
+
+    container = ttk.Frame(root, padding=18)
+    container.grid(row=0, column=0, sticky="nsew")
+    ttk.Label(
+        container,
+        text="Please accept all orders first and then click this button.",
+        wraplength=360,
+        justify="center",
+    ).grid(row=0, column=0, pady=(0, 14))
+    ttk.Button(container, text="Continue", command=continue_after_accepting_orders).grid(row=1, column=0)
+
+    root.update_idletasks()
+    width = root.winfo_width()
+    height = root.winfo_height()
+    x = (root.winfo_screenwidth() // 2) - (width // 2)
+    y = (root.winfo_screenheight() // 2) - (height // 2)
+    root.geometry(f"+{x}+{y}")
+    root.mainloop()
+
+
+def replace_current_tab_with_url(driver: webdriver.Firefox, url: str) -> None:
+    current_handle = driver.current_window_handle
+    driver.switch_to.new_window("tab")
+    new_handle = driver.current_window_handle
+    driver.get(url)
+
+    try:
+        driver.switch_to.window(current_handle)
+        driver.close()
+    except WebDriverException as exc:
+        log_event("NAV", f"Could not close the previous tab: {exc}")
+    finally:
+        driver.switch_to.window(new_handle)
+
+    log_event("NAV", f"Closed the previous tab and opened a fresh target tab: {url}")
+
+
 def prepare_orders_view(driver: webdriver.Firefox, url: str) -> None:
     open_target_page(driver, url)
     log_event("NAV", "Page opened successfully. Waiting for the Skip for Later button...")
@@ -717,9 +834,15 @@ def prepare_orders_view(driver: webdriver.Firefox, url: str) -> None:
     except TimeoutException:
         log_event("NAV", "Skip for Later button did not appear within the timeout window.")
     log_event("FORM", "Waiting for page size dropdown option 100 with no timeout cutoff...")
-    select_page_size_option(driver, option_text="100")
-    wait_for_page_size_value(driver, option_text="100", timeout=30)
-    log_event("DONE", "Page size option 100 selected.")
+    while True:
+        try:
+            select_page_size_option(driver, option_text="100", timeout=12)
+            wait_for_page_size_value(driver, option_text="100", timeout=12)
+            log_event("DONE", "Page size option 100 selected.")
+            return
+        except TimeoutException as exc:
+            log_event("FORM", f"Page size button was not found or did not update: {exc}")
+            show_accept_all_orders_prompt(driver, url)
 
 
 def parse_args() -> argparse.Namespace:
@@ -729,7 +852,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         default=DEFAULT_PROFILE_NAME,
-        help="Firefox profile name to use (default: prabhu).",
+        help=f"Firefox profile name to preselect (default: {DEFAULT_PROFILE_NAME}).",
     )
     parser.add_argument(
         "--url",
@@ -741,8 +864,14 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    log_event("START", f"Opening Firefox profile '{args.profile}' and navigating to the target Flipkart URL...")
-    driver = build_firefox_driver(args.profile)
+    try:
+        profile_name = prompt_for_firefox_profile(args.profile)
+    except ValueError:
+        log_event("DONE", "Firefox profile selection was cancelled. Exiting.")
+        return
+
+    log_event("START", f"Opening Firefox profile '{profile_name}' and navigating to the target Flipkart URL...")
+    driver = build_firefox_driver(profile_name)
     try:
         prepare_orders_view(driver, args.url)
         selection_cycle_index = 0
